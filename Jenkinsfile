@@ -1,12 +1,10 @@
 pipeline {
   agent any
 
-  // Use either webhook trigger OR polling (keep only one of these two 'triggers' blocks)
+  // Trigger: keep webhook OR polling (not both)
   triggers {
-    // For GitHub webhooks (recommended)
     githubPush()
-    // Fallback (comment above line and uncomment this if you can't open 8080 to GitHub):
-    // pollSCM('H/2 * * * *') // check every ~30 mins
+    // pollSCM('H/2 * * * *')
   }
 
   options {
@@ -14,12 +12,47 @@ pipeline {
     disableConcurrentBuilds()
   }
 
+  // Toggle so you can enable Sonar only when ready
+  parameters {
+    booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Run SonarQube analysis & enforce Quality Gate')
+  }
+
   stages {
     stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    // --- NEW: Static analysis stage (runs only when RUN_SONAR=true) ---
+    stage('SonarQube Analysis') {
+      when { expression { params.RUN_SONAR } }
       steps {
-        checkout scm
+        // 'sonar-local' must match the name you configure in Manage Jenkins → System → SonarQube servers
+        withSonarQubeEnv('sonar-local') {
+          script {
+            // Tool name must match Manage Jenkins → Tools → SonarQube Scanner installations
+            def scannerHome = tool 'SonarScanner'
+            sh """
+              set -e
+              "${scannerHome}/bin/sonar-scanner" \
+                -Dsonar.projectKey=myweb \
+                -Dsonar.sources=. \
+                -Dsonar.sourceEncoding=UTF-8
+            """
+          }
+        }
       }
     }
+
+    // --- NEW: Wait for Quality Gate result (only when RUN_SONAR=true) ---
+    stage('Quality Gate') {
+      when { expression { params.RUN_SONAR } }
+      steps {
+        timeout(time: 3, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
     stage('Build Docker Image') {
       steps {
         sh '''
@@ -29,6 +62,7 @@ pipeline {
         '''
       }
     }
+
     stage('Deploy Container') {
       steps {
         sh '''
@@ -43,9 +77,10 @@ pipeline {
       }
     }
   }
+
   post {
     success {
-      echo "Deployed successfully. Visit http://$JENKINS_URL to check Jenkins and http://<EC2-Public-IP>/ for site."
+      echo "Deployed successfully. Visit http://$JENKINS_URL for Jenkins and http://<EC2-Public-IP>/ for the site."
     }
     failure {
       echo "Build failed. Check console output."
