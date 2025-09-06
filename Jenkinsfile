@@ -31,27 +31,38 @@ pipeline {
       }
     }
 
-stage('Build Image') {
+stage('Build Docker Image') {
   steps {
     script {
       sh 'set -e; docker build -t myweb:${GIT_COMMIT} -t myweb:latest .'
-      env.BUILT_DIGEST = sh(returnStdout: true, script: "docker inspect --format='{{index .RepoDigests 0}}' myweb:latest").trim()
+      // Use the local image ID (reliable even if RepoDigests is empty)
+      env.BUILT_IMAGE_ID = sh(
+        returnStdout: true,
+        script: "docker inspect --format='{{.Id}}' myweb:latest"
+      ).trim()
     }
   }
+}
 
 
-stage('Deploy (only if changed)') {
+stage('Deploy Container') {
   steps {
     script {
-      def running = sh(returnStdout: true, script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true").trim()
-      if (running != env.BUILT_DIGEST) {
+      // Running container's image ID (empty if container doesn't exist yet)
+      def runningId = sh(
+        returnStdout: true,
+        script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true"
+      ).trim()
+
+      if (runningId != env.BUILT_IMAGE_ID) {
+        echo "Image changed → redeploying"
         sh '''
+          set -e
           docker rm -f myweb || true
           docker run -d --name myweb -p 80:80 myweb:latest
         '''
-        echo "Redeployed (image changed)."
       } else {
-        echo "Image unchanged → skipping redeploy."
+        echo "Image unchanged → skipping redeploy"
       }
     }
   }
