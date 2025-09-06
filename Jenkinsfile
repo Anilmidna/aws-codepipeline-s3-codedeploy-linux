@@ -4,7 +4,9 @@ pipeline {
   options { timestamps(); disableConcurrentBuilds() }
 
   stages {
-    stage('Checkout') { steps { checkout scm } }
+    stage('Checkout') {
+      steps { checkout scm }
+    }
 
     stage('SonarQube Analysis') {
       steps {
@@ -13,7 +15,7 @@ pipeline {
             def scannerHome = tool 'SonarScanner'
             sh """
               set -e
-              "${scannerHome}/bin/sonar-scanner" \
+              "\${scannerHome}/bin/sonar-scanner" \
                 -Dsonar.projectKey=myweb \
                 -Dsonar.sources=. \
                 -Dsonar.sourceEncoding=UTF-8
@@ -31,43 +33,49 @@ pipeline {
       }
     }
 
-stage('Build Docker Image') {
-  steps {
-    script {
-      sh 'set -e; docker build -t myweb:${GIT_COMMIT} -t myweb:latest .'
-      // Use the local image ID (reliable even if RepoDigests is empty)
-      env.BUILT_IMAGE_ID = sh(
-        returnStdout: true,
-        script: "docker inspect --format='{{.Id}}' myweb:latest"
-      ).trim()
+    stage('Build Docker Image') {
+      steps {
+        script {
+          sh '''
+            set -e
+            docker build -t myweb:${BUILD_NUMBER} .
+            docker tag myweb:${BUILD_NUMBER} myweb:latest
+          '''
+          // Capture the image ID of the freshly built :latest
+          env.BUILT_IMAGE_ID = sh(
+            returnStdout: true,
+            script: "docker inspect --format='{{.Id}}' myweb:latest"
+          ).trim()
+          echo "Built image ID: ${env.BUILT_IMAGE_ID}"
+        }
+      }
     }
-  }
-}
 
+    stage('Deploy Container (only if changed)') {
+      steps {
+        script {
+          // Get the image ID the current 'myweb' container is running (if any)
+          def runningId = sh(
+            returnStdout: true,
+            script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true"
+          ).trim()
 
-stage('Deploy Container') {
-  steps {
-    script {
-      // Running container's image ID (empty if container doesn't exist yet)
-      def runningId = sh(
-        returnStdout: true,
-        script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true"
-      ).trim()
+          echo "Running image ID: ${runningId ?: '(none)'}"
 
-      if (runningId != env.BUILT_IMAGE_ID) {
-        echo "Image changed → redeploying"
-        sh '''
-          set -e
-          docker rm -f myweb || true
-          docker run -d --name myweb -p 80:80 myweb:latest
-        '''
-      } else {
-        echo "Image unchanged → skipping redeploy"
+          if (runningId != env.BUILT_IMAGE_ID) {
+            echo "Image changed → redeploying"
+            sh '''
+              set -e
+              docker rm -f myweb || true
+              docker run -d --name myweb -p 80:80 myweb:latest
+            '''
+          } else {
+            echo "Image unchanged → skipping redeploy"
+          }
+        }
       }
     }
   }
-}
-
 
   post {
     success { echo "Deployed. http://<EC2-Public-IP>/" }
