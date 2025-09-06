@@ -31,25 +31,46 @@ stage('SonarQube Analysis') {
       }
     }
 
-    stage('Build Docker Image') {
+stage('Build Docker Image') {
       steps {
-        sh '''
-          set -e
-          docker build -t myweb:${BUILD_NUMBER} .
-          docker tag myweb:${BUILD_NUMBER} myweb:latest
-        '''
+        script {
+          sh '''
+            set -e
+            docker build -t myweb:${BUILD_NUMBER} .
+            docker tag myweb:${BUILD_NUMBER} myweb:latest
+          '''
+          // Capture the image ID of the freshly built :latest
+          env.BUILT_IMAGE_ID = sh(
+            returnStdout: true,
+            script: "docker inspect --format='{{.Id}}' myweb:latest"
+          ).trim()
+          echo "Built image ID: ${env.BUILT_IMAGE_ID}"
+        }
       }
     }
 
-    stage('Deploy Container') {
+    stage('Deploy Container (only if changed)') {
       steps {
-        sh '''
-          set -e
-          if [ "$(docker ps -aq -f name=myweb)" ]; then
-            docker rm -f myweb || true
-          fi
-          docker run -d --name myweb -p 80:80 myweb:latest
-        '''
+        script {
+          // Get the image ID the current 'myweb' container is running (if any)
+          def runningId = sh(
+            returnStdout: true,
+            script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true"
+          ).trim()
+
+          echo "Running image ID: ${runningId ?: '(none)'}"
+
+          if (runningId != env.BUILT_IMAGE_ID) {
+            echo "Image changed → redeploying"
+            sh '''
+              set -e
+              docker rm -f myweb || true
+              docker run -d --name myweb -p 80:80 myweb:latest
+            '''
+          } else {
+            echo "Image unchanged → skipping redeploy"
+          }
+        }
       }
     }
   }
