@@ -9,14 +9,16 @@ pipeline {
 stage('SonarQube Analysis') {
   steps {
     withSonarQubeEnv('sonar-local') {
-      sh '''
-        set -e
-        docker run --rm \
-          -e SONAR_HOST_URL="$SONAR_HOST_URL" \
-          -e SONAR_LOGIN="$SONAR_AUTH_TOKEN" \
-          -v "$PWD":/usr/src \
-          sonarsource/sonar-scanner-cli:latest
-      '''
+      script {
+        def scannerHome = tool 'SonarScanner'
+        sh """
+          set -e
+          "${scannerHome}/bin/sonar-scanner" \
+            -Dsonar.projectKey=myweb \
+            -Dsonar.sources=. \
+            -Dsonar.sourceEncoding=UTF-8
+        """
+      }
     }
   }
 }
