@@ -31,28 +31,32 @@ pipeline {
       }
     }
 
-    stage('Build Docker Image') {
-      steps {
-        sh '''
-          set -e
-          docker build -t myweb:${BUILD_NUMBER} .
-          docker tag myweb:${BUILD_NUMBER} myweb:latest
-        '''
-      }
+stage('Build Image') {
+  steps {
+    script {
+      sh 'set -e; docker build -t myweb:${GIT_COMMIT} -t myweb:latest .'
+      env.BUILT_DIGEST = sh(returnStdout: true, script: "docker inspect --format='{{index .RepoDigests 0}}' myweb:latest").trim()
     }
+  }
 
-    stage('Deploy Container') {
-      steps {
+
+stage('Deploy (only if changed)') {
+  steps {
+    script {
+      def running = sh(returnStdout: true, script: "docker inspect --format='{{.Image}}' myweb 2>/dev/null || true").trim()
+      if (running != env.BUILT_DIGEST) {
         sh '''
-          set -e
-          if [ "$(docker ps -aq -f name=myweb)" ]; then
-            docker rm -f myweb || true
-          fi
+          docker rm -f myweb || true
           docker run -d --name myweb -p 80:80 myweb:latest
         '''
+        echo "Redeployed (image changed)."
+      } else {
+        echo "Image unchanged → skipping redeploy."
       }
     }
   }
+}
+
 
   post {
     success { echo "Deployed. http://<EC2-Public-IP>/" }
