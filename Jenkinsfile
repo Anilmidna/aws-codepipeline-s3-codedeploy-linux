@@ -6,22 +6,20 @@ pipeline {
   stages {
     stage('Checkout') { steps { checkout scm } }
 
-    stage('SonarQube Analysis') {
-      steps {
-        withSonarQubeEnv('sonar-local') {
-          script {
-            def scannerHome = tool 'SonarScanner'
-            sh """
-              set -e
-              "${scannerHome}/bin/sonar-scanner" \
-                -Dsonar.projectKey=myweb \
-                -Dsonar.sources=. \
-                -Dsonar.sourceEncoding=UTF-8
-            """
-          }
-        }
-      }
+stage('SonarQube Analysis') {
+  steps {
+    withSonarQubeEnv('sonar-local') {
+      sh '''
+        set -e
+        docker run --rm \
+          -e SONAR_HOST_URL="$SONAR_HOST_URL" \
+          -e SONAR_LOGIN="$SONAR_AUTH_TOKEN" \
+          -v "$PWD":/usr/src \
+          sonarsource/sonar-scanner-cli:latest
+      '''
     }
+  }
+}
 
     stage('Quality Gate') {
       steps {
