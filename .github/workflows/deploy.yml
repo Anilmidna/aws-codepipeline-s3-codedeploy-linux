@@ -1,0 +1,51 @@
+name: Deploy static index.html to Azure VM (password auth)
+
+on:
+  push:
+    branches: [ "main" ]   # run when you push to main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install & start Nginx on VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          password: ${{ secrets.VM_PASS }}
+          script: |
+            set -e
+            if ! command -v nginx >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo systemctl enable nginx
+            fi
+            sudo systemctl start nginx
+            sudo mkdir -p /var/www/html
+
+      - name: Copy index.html to /tmp/site
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          password: ${{ secrets.VM_PASS }}
+          source: "index.html"
+          target: "/tmp/site"
+          overwrite: true
+
+      - name: Publish to /var/www/html and restart Nginx
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          password: ${{ secrets.VM_PASS }}
+          script: |
+            set -e
+            sudo mv /tmp/site/index.html /var/www/html/index.html
+            sudo chown root:root /var/www/html/index.html
+            sudo chmod 644 /var/www/html/index.html
+            sudo systemctl restart nginx
