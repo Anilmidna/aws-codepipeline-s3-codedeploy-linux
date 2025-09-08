@@ -2,12 +2,12 @@ name: Deploy static index.html to Azure VM (password auth)
 
 on:
   push:
-    branches: [ "main" ]   # run when you push to main
+    branches: [ "main", "master" ]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,6 +22,7 @@ jobs:
             set -e
             if ! command -v nginx >/dev/null 2>&1; then
               sudo apt-get update -y
+              sudo apt-get install -y nginx
               sudo systemctl enable nginx
             fi
             sudo systemctl start nginx
