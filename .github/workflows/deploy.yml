@@ -1,26 +1,22 @@
-name: Deploy to Azure Storage Static Website
+name: Auto Deploy to Azure VM
 
 on:
   push:
-    branches: [ "master", "main" ]  # trigger on your default branch
-  workflow_dispatch: {}              # allow manual runs
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Upload everything in the repo root to the $web container
-      - name: Upload to $web
-        uses: azure/cli@v2
+      - name: Add SSH Key
+        uses: webfactory/ssh-agent@v0.8.1
         with:
-          inlineScript: |
-            set -e
-            az storage blob upload-batch \
-              --account-name "${{ secrets.AZ_STORAGE_ACCOUNT }}" \
-              --account-key  "${{ secrets.AZ_STORAGE_KEY }}" \
-              --destination  "${{ secrets.AZ_STORAGE_CONTAINER }}" \
-              --source "." \
-              --overwrite true
+          ssh-private-key: ${{ secrets.VM_SSH_KEY }}
+
+      - name: Update Web Files on Azure VM
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} \
+            "cd ~/site && git pull origin main"
