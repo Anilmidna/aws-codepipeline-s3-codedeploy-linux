@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,5 +19,4 @@ jobs:
 
       - name: Update Web Files on Azure VM
         run: |
-    ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/site && git pull origin main"
-            "cd ~/site && git pull origin main"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/site && git pull origin main"
