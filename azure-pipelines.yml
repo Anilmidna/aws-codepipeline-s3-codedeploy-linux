@@ -1,0 +1,28 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+
+  - task: InstallSSHKey@0
+    inputs:
+      knownHostsEntry: ''
+      sshPublicKey: ''
+      sshKeySecureFile: ''
+    displayName: 'Setup SSH Key (skipped, using inline next)'
+
+  - script: |
+      echo "${VM_SSH_KEY}" > id_ed25519
+      chmod 600 id_ed25519
+      ssh -i id_ed25519 -o StrictHostKeyChecking=no ${VM_USER}@${VM_HOST} \
+        "cd ~/site && git pull origin main"
+    env:
+      VM_HOST: $(VM_HOST)
+      VM_USER: $(VM_USER)
+      VM_SSH_KEY: $(VM_SSH_KEY)
+    displayName: 'Deploy latest code to VM'
